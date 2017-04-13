@@ -4,22 +4,20 @@ import numpy
 from tensorflow.examples.tutorials.mnist import input_data
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
-import matplotlib.cm as cm
-import pylab
 
 print "Start loading MNIST data "
 mndata = input_data.read_data_sets('data/mnist')
 train_image = mndata.train.images # 60000 * 784
 test_image = mndata.test.images # 10000 * 784
 test_label = mndata.test.labels
+print len(train_image)
 print "Finished loading MNIST data"
 
 n_hidden = 512
 n_input = 784
 batch_size = 50
-l_number = 1
-len_test = 10000
-len_train = 60000
+len_test = len(test_image)
+len_train = len(train_image)
 len_sample = 1000
 
 
@@ -233,9 +231,9 @@ def run():
                 for i in range(len_test):
                     eval_test_vae += sess.run(eval_vae, feed_dict={x: test_image[i:i + 1]}) / float(len_test)
                     eval_test_ws += sess.run(eval_ws, feed_dict={x: test_image[i:i + 1]}) / float(len_test)
-                for i in range(len_train):
-                    eval_train_vae += sess.run(eval_vae, feed_dict={x: train_image[i:i + 1]}) / float(len_train)
-                    eval_train_ws += sess.run(eval_ws, feed_dict={x: train_image[i:i + 1]}) / float(len_train)
+                for j in range(len_train):
+                    eval_train_vae += sess.run(eval_vae, feed_dict={x: train_image[j:j + 1]}) / float(len_train)
+                    eval_train_ws += sess.run(eval_ws, feed_dict={x: train_image[j:j + 1]}) / float(len_train)
 
                 print str(eval_train_vae) + "\t" + str(eval_test_vae) + "\t" + str(eval_train_ws) + "\t" + str(eval_test_ws)
                 print "-----------------------------------------"
