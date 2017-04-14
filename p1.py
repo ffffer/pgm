@@ -208,7 +208,7 @@ def run():
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
         for e in range(100):
-            for b in range(12):
+            for b in range(1100):
                 batch = train_image[b * batch_size : b * batch_size + batch_size]
 
                 _, lb = sess.run([train_e, lower_bound], feed_dict={x: batch})
