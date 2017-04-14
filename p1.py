@@ -10,7 +10,6 @@ mndata = input_data.read_data_sets('data/mnist')
 train_image = mndata.train.images # 60000 * 784
 test_image = mndata.test.images # 10000 * 784
 test_label = mndata.test.labels
-print len(train_image)
 print "Finished loading MNIST data"
 
 n_hidden = 512
@@ -91,7 +90,7 @@ def normal_prob(x, mu, sigma, standard=False):
         mu = tf.convert_to_tensor([[0.0, 0.0]], dtype=tf.float64)
         sigma = tf.convert_to_tensor([[1.0, 1.0]], dtype=tf.float64)
     var = tf.square(sigma)
-    x_minus_mu = x - mu
+    x_minus_mu = tf.subtract(x, mu)
     x_sigma_x = tf.reduce_sum(tf.multiply(tf.square(x_minus_mu), var ** -1.0), 1)
     e = tf.exp(-0.5 * x_sigma_x)
     constant = 1.0 / (2.0 * math.pi) * (tf.reduce_prod(sigma, 1) ** -1.0)
@@ -100,18 +99,21 @@ def normal_prob(x, mu, sigma, standard=False):
 
 
 def log_normal_prob(x, mu, sigma):
-    return -math.log(2*math.pi) - 0.5 * tf.log(tf.reduce_prod(tf.square(sigma), 1)) - 0.5 * (tf.reduce_sum(tf.multiply(tf.square(x-mu), (tf.square(sigma) ** -1.0)), 1))
+    return -math.log(2*math.pi) - 0.5 * tf.log(tf.reduce_prod(tf.square(sigma), 1)) - 0.5 * (tf.reduce_sum(tf.multiply(
+        tf.square(tf.subtract(x, mu)), (tf.square(sigma) ** -1.0)), 1))
 
 
 def evaluate(x, p_weights, p_biases, q_weights, q_biases):
     z_mu_eval, z_sigma_eval = qzx(x, q_weights, q_biases)
     z_gen_eval = sample_z([len_sample, 2], z_mu_eval, z_sigma_eval)
     x_gen_prob_eval, x_gen_eval = pxz(z_gen_eval, p_weights, p_biases)
-    p1 = tf.exp(tf.reduce_sum(-1.0 * tf.nn.sigmoid_cross_entropy_with_logits(labels=x, logits=x_gen_eval), 1))
+
+    p1 = tf.exp(tf.negative(tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(labels=x, logits=x_gen_eval), 1)))
     p2 = normal_prob(z_gen_eval, [], [], standard=True)
     q = normal_prob(z_gen_eval, z_mu_eval, z_sigma_eval)
-    p = tf.multiply(p1, p2)
-    l_xi = tf.log(tf.reduce_mean(p / q))
+    p2_over_q = tf.multiply(p2, q ** -1.0)
+    p_over_q = tf.multiply(p2_over_q, p1)
+    l_xi = tf.log(tf.reduce_mean(p_over_q))
     return l_xi
 
 
@@ -190,7 +192,7 @@ def run():
     train_e = tf.train.AdamOptimizer().minimize(lower_bound, var_list=var_list)
 
     # evaluation
-    eval_vae = evaluate(x, encoder_weights, encoder_biases, decoder_weights, decoder_biases)
+    eval_vae= evaluate(x, encoder_weights, encoder_biases, decoder_weights, decoder_biases)
     eval_ws = evaluate(x, sleep_weights, sleep_biases, wake_weights, wake_biases)
 
     # plot
@@ -206,7 +208,7 @@ def run():
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
         for e in range(100):
-            for b in range(1200):
+            for b in range(12):
                 batch = train_image[b * batch_size : b * batch_size + batch_size]
 
                 _, lb = sess.run([train_e, lower_bound], feed_dict={x: batch})
@@ -221,7 +223,7 @@ def run():
                     print ml
                     print "\n"
 
-            if e % 10 == 0:
+            if e % 5 == 0:
                 print "start evaluation"
                 eval_train_vae = 0.0
                 eval_train_ws = 0.0
@@ -229,11 +231,13 @@ def run():
                 eval_test_ws = 0.0
 
                 for i in range(len_test):
-                    eval_test_vae += sess.run(eval_vae, feed_dict={x: test_image[i:i + 1]}) / float(len_test)
-                    eval_test_ws += sess.run(eval_ws, feed_dict={x: test_image[i:i + 1]}) / float(len_test)
+                    v = sess.run(eval_vae, feed_dict={x: test_image[i:i + 1]})
+                    eval_test_vae += (v / float(len_test))
+                    #print p1, p2, pq
+                    eval_test_ws += (sess.run(eval_ws, feed_dict={x: test_image[i:i + 1]}) / float(len_test))
                 for j in range(len_train):
-                    eval_train_vae += sess.run(eval_vae, feed_dict={x: train_image[j:j + 1]}) / float(len_train)
-                    eval_train_ws += sess.run(eval_ws, feed_dict={x: train_image[j:j + 1]}) / float(len_train)
+                    eval_train_vae += (sess.run(eval_vae, feed_dict={x: train_image[j:j + 1]}) / float(len_train))
+                    eval_train_ws += (sess.run(eval_ws, feed_dict={x: train_image[j:j + 1]}) / float(len_train))
 
                 print str(eval_train_vae) + "\t" + str(eval_test_vae) + "\t" + str(eval_train_ws) + "\t" + str(eval_test_ws)
                 print "-----------------------------------------"
