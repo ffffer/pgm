@@ -223,7 +223,7 @@ def run():
                     print ml
                     print "\n"
 
-            if e % 5 == 0:
+            if e % 10 == 0:
                 print "start evaluation"
                 eval_train_vae = 0.0
                 eval_train_ws = 0.0
