@@ -92,6 +92,7 @@ def pxz_ws(z):
 
     return prob, out_layer
 
+
 def pxz_vae(z):
     layer_1 = tf.add(tf.matmul(z, encoder_weights['_h1']), encoder_biases['_b1'])
     layer_1 = tf.nn.relu(layer_1)
@@ -104,7 +105,7 @@ def pxz_vae(z):
 
 def sample_z(shape, mu, sigma):
     epi = tf.random_normal(shape=shape, dtype=tf.float64)
-    z = mu + tf.multiply(sigma, epi)
+    z = mu + sigma * epi
 
     return z
 
@@ -118,9 +119,7 @@ def normal_prob(x, mu, sigma, standard=False):
     if standard:
         mu = tf.convert_to_tensor([[0.0, 0.0]], dtype=tf.float64)
         sigma = tf.convert_to_tensor([[1.0, 1.0]], dtype=tf.float64)
-    var = tf.square(sigma)
-    x_minus_mu = tf.subtract(x, mu)
-    x_sigma_x = tf.reduce_sum(tf.multiply(tf.square(x_minus_mu), var ** -1.0), 1)
+    x_sigma_x = tf.reduce_sum(((x-mu) ** 2.0) * (sigma ** 2.0 ** -1.0), 1)
     e = tf.exp(-0.5 * x_sigma_x)
     constant = 1.0 / (2.0 * math.pi) * (tf.reduce_prod(sigma, 1) ** -1.0)
 
@@ -128,18 +127,26 @@ def normal_prob(x, mu, sigma, standard=False):
 
 
 def log_normal_prob(x, mu, sigma):
-    return -math.log(2*math.pi) - 1.0 * tf.log(tf.reduce_prod(sigma, 1)) - 0.5 * (tf.reduce_sum(tf.multiply(
-        tf.square(tf.subtract(x, mu)), (tf.square(sigma) ** -1.0)), 1))
+    return -math.log(2*math.pi) - 1.0 * tf.log(tf.reduce_prod(sigma, 1)) - 0.5 * (tf.reduce_sum((
+        ((x-mu)**2.0) * (sigma ** -2.0)), 1))
 
 
 def evaluate(x, network_name):
     if network_name == 'vae':
+        print "..........."
         z_mu_eval, z_sigma_eval = qzx_vae(x)
-        z_gen_eval = sample_z([len_sample, 2], z_mu_eval, z_sigma_eval)
+        z_gen_eval = sample_z([len_sample, batch_size, 2], z_mu_eval, z_sigma_eval)
+        print ",,,,,,,,,,"
+        print z_gen_eval
+        z_gen_eval = tf.reshape(z_gen_eval, [len_sample * batch_size, 2])
+        print "11111111111"
+        print z_gen_eval
         x_gen_prob_eval, x_gen_eval = pxz_vae(z_gen_eval)
+        print "222222222222"
     else:
         z_mu_eval, z_sigma_eval = qzx_ws(x)
-        z_gen_eval = sample_z([len_sample, 2], z_mu_eval, z_sigma_eval)
+        z_gen_eval = sample_z([len_sample, batch_size, 2], z_mu_eval, z_sigma_eval)
+        z_gen_eval = tf.reshape(z_gen_eval, [len_sample * batch_size, 2])
         x_gen_prob_eval, x_gen_eval = pxz_ws(z_gen_eval)
 
     p1 = tf.exp(tf.negative(tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(labels=x, logits=x_gen_eval), 1)))
@@ -167,6 +174,14 @@ def plot(samples, name, dim):
     fig.savefig(name)
     plt.show()
     return fig
+
+
+def plot_eval(line1, line2, name):
+    x = numpy.arange(10)
+    plt.plot(x, line1)
+    plt.plot(x, line2)
+    plt.savefig(name)
+    plt.show()
 
 
 def plot_scatter(samples, label, name):
@@ -220,7 +235,7 @@ def run():
     x_gen_prob_v, x_gen_v = pxz_vae(z_gen_v)
 
     cross_entropy_v = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(labels=x, logits=x_gen_v), 1)
-    kl = 0.5 * tf.reduce_sum(tf.square(z_sigma_v) + z_mu_v ** 2 - 1.0 - tf.log(tf.square(z_sigma_v)), 1)
+    kl = 0.5 * tf.reduce_sum((z_sigma_v)**2.0 + z_mu_v ** 2 - 1.0 - tf.log((z_sigma_v)**2), 1)
     lower_bound = tf.reduce_mean(cross_entropy_v + kl)
     var_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='vae')
     train_e = tf.train.AdamOptimizer().minimize(lower_bound, var_list=var_list)
@@ -241,6 +256,12 @@ def run():
 
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
+
+        eval_train_vae_line = []
+        eval_test_vae_line = []
+        eval_train_ws_line = []
+        eval_test_ws_line = []
+
         for e in range(100):
             for b in range(110):
                 batch = train_image[b * batch_size : b * batch_size + batch_size]
@@ -259,7 +280,7 @@ def run():
                     print tf.reduce_mean(loss_w).eval()
                     print ml
                     print "\n"
-
+            continue
             if e % 10 == 0:
                 print "start evaluation"
                 eval_train_vae = 0.0
@@ -267,13 +288,18 @@ def run():
                 eval_test_vae = 0.0
                 eval_test_ws = 0.0
 
-                for i in range(len_test):
-                    eval_test_vae += (sess.run(eval_vae, feed_dict={x: test_image[i:i + 1]}) / float(len_test))
+                for i in range(2):
+                    eval_test_vae += (sess.run(eval_vae, feed_dict={x: test_image[i*batch_size:i*batch_size+batch_size]}) / float(len_test))
                     #print p1, p2, pq
-                    eval_test_ws += (sess.run(eval_ws, feed_dict={x: test_image[i:i + 1]}) / float(len_test))
-                for j in range(len_train):
-                    eval_train_vae += (sess.run(eval_vae, feed_dict={x: train_image[j:j + 1]}) / float(len_train))
-                    eval_train_ws += (sess.run(eval_ws, feed_dict={x: train_image[j:j + 1]}) / float(len_train))
+                    #eval_test_ws += (sess.run(eval_ws, feed_dict={x: test_image[i*batch_size:i*batch_size+batch_size]}) / float(len_test))
+                #for j in range(2):
+                    #eval_train_vae += (sess.run(eval_vae, feed_dict={x: train_image[j*batch_size:j*batch_size+batch_size]}) / float(len_train))
+                    #eval_train_ws += (sess.run(eval_ws, feed_dict={x: train_image[j*batch_size:j*batch_size+batch_size]}) / float(len_train))
+
+                eval_train_vae_line.append(eval_train_vae)
+                eval_train_ws_line.append(eval_train_ws)
+                eval_test_vae_line.append(eval_test_vae)
+                eval_test_ws_line.append(eval_test_ws)
 
                 print str(eval_train_vae) + "\t" + str(eval_test_vae) + "\t" + str(eval_train_ws) + "\t" + str(eval_test_ws)
                 print "-----------------------------------------"
@@ -292,5 +318,8 @@ def run():
         x_sample_ws = sess.run(x_ws, feed_dict={z: max_min(z_sample_ws)})
         plot(x_sample_vae, "vae_20_20", 20)
         plot(x_sample_ws, "ws_20_20", 20)
+
+        plot_eval(eval_train_ws, eval_test_ws, "wake_sleep_1000")
+        plot_eval(eval_train_vae, eval_test_vae, "vae_1000")
 
 run()
