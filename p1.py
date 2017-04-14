@@ -268,8 +268,7 @@ def run():
                 eval_test_ws = 0.0
 
                 for i in range(len_test):
-                    v = sess.run(eval_vae, feed_dict={x: test_image[i:i + 1]})
-                    eval_test_vae += (v / float(len_test))
+                    eval_test_vae += (sess.run(eval_vae, feed_dict={x: test_image[i:i + 1]}) / float(len_test))
                     #print p1, p2, pq
                     eval_test_ws += (sess.run(eval_ws, feed_dict={x: test_image[i:i + 1]}) / float(len_test))
                 for j in range(len_train):
