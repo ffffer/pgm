@@ -4,6 +4,8 @@ import numpy
 from tensorflow.examples.tutorials.mnist import input_data
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL']='2'
 
 print "Start loading MNIST data "
 mndata = input_data.read_data_sets('data/mnist')
@@ -64,7 +66,7 @@ print "Finished initializing weights"
 
 
 def qzx_ws(x):
-    layer_1 = tf.add(tf.matmul(x, wake_weights['_h1']), wake_biases['_b1'])
+    layer_1 = tf.matmul(x, wake_weights['_h1'])+ wake_biases['_b1']
     layer_1 = tf.nn.relu(layer_1)
 
     out_layer_mu = tf.matmul(layer_1, wake_weights['_h_out_mu']) + wake_biases['_b_out_mu']
@@ -74,7 +76,7 @@ def qzx_ws(x):
 
 
 def qzx_vae(x):
-    layer_1 = tf.add(tf.matmul(x, decoder_weights['_h1']), decoder_biases['_b1'])
+    layer_1 = tf.matmul(x, decoder_weights['_h1']) + decoder_biases['_b1']
     layer_1 = tf.nn.relu(layer_1)
 
     out_layer_mu = tf.matmul(layer_1, decoder_weights['_h_out_mu']) + decoder_biases['_b_out_mu']
@@ -84,7 +86,7 @@ def qzx_vae(x):
 
 
 def pxz_ws(z):
-    layer_1 = tf.add(tf.matmul(z, sleep_weights['_h1']), sleep_biases['_b1'])
+    layer_1 = tf.matmul(z, sleep_weights['_h1']) + sleep_biases['_b1']
     layer_1 = tf.nn.relu(layer_1)
 
     out_layer = tf.matmul(layer_1, sleep_weights['_h_out']) + sleep_biases['_b_out']
@@ -94,7 +96,7 @@ def pxz_ws(z):
 
 
 def pxz_vae(z):
-    layer_1 = tf.add(tf.matmul(z, encoder_weights['_h1']), encoder_biases['_b1'])
+    layer_1 = tf.matmul(z, encoder_weights['_h1']) + encoder_biases['_b1']
     layer_1 = tf.nn.relu(layer_1)
 
     out_layer = tf.matmul(layer_1, encoder_weights['_h_out']) + encoder_biases['_b_out']
@@ -133,16 +135,12 @@ def log_normal_prob(x, mu, sigma):
 
 def evaluate(x, network_name):
     if network_name == 'vae':
-        print "..........."
         z_mu_eval, z_sigma_eval = qzx_vae(x)
         z_gen_eval = sample_z([len_sample, batch_size, 2], z_mu_eval, z_sigma_eval)
-        print ",,,,,,,,,,"
         print z_gen_eval
         z_gen_eval = tf.reshape(z_gen_eval, [len_sample * batch_size, 2])
-        print "11111111111"
         print z_gen_eval
         x_gen_prob_eval, x_gen_eval = pxz_vae(z_gen_eval)
-        print "222222222222"
     else:
         z_mu_eval, z_sigma_eval = qzx_ws(x)
         z_gen_eval = sample_z([len_sample, batch_size, 2], z_mu_eval, z_sigma_eval)
@@ -172,24 +170,25 @@ def plot(samples, name, dim):
         plt.imshow(sample.reshape(28, 28), cmap='Greys_r')
 
     fig.savefig(name)
-    plt.show()
-    return fig
+    plt.close()
 
 
 def plot_eval(line1, line2, name):
+    fig = plt.figure()
     x = numpy.arange(10)
     plt.plot(x, line1)
     plt.plot(x, line2)
     plt.savefig(name)
-    plt.show()
+    fig.close()
 
 
 def plot_scatter(samples, label, name):
+    fig = plt.figure()
     samples = numpy.matrix.transpose(samples)
     plt.scatter(samples[0], samples[1], c=label)
     plt.legend()
     plt.savefig(name)
-    plt.show()
+    plt.close()
 
 
 def max_min(coor):
@@ -255,7 +254,9 @@ def run():
     z_scatter_ws = sample_z([len_test, 2], z_mu_scatter_ws, z_sigma_scatter_ws)
 
     with tf.Session() as sess:
+
         sess.run(tf.global_variables_initializer())
+        sess.graph.finalize()
 
         eval_train_vae_line = []
         eval_test_vae_line = []
@@ -270,20 +271,21 @@ def run():
                 sess.run(train_e, feed_dict={x: batch})
 
                 sess.run(train_w, feed_dict={x: batch})
-                sess.run(train_s, feed_dict={z: tf.random_normal([1, 2]).eval()})
+                sess.run(train_s, feed_dict={z: numpy.random.randn(1, 2)})
 
                 continue
                 if b % 10 == 0:
                     print "e : " + str(e) + " | b : " + str(b)
                     lb = sess.run(lower_bound, feed_dict={x: batch})
                     loss_w = sess.run(cross_entropy_w, feed_dict={x: batch})
-                    ml = sess.run(likelihood, feed_dict={z: tf.random_normal([1, 2]).eval()})
+                    ml = sess.run(likelihood, feed_dict={z: numpy.random.randn(1, 2)})
                     print lb
                     print tf.reduce_mean(loss_w).eval()
                     print ml
                     print "\n"
+
             continue
-            if e % 10 == 0:
+            if e % 20 == 0:
                 print "start evaluation"
                 eval_train_vae = 0.0
                 eval_train_ws = 0.0
@@ -306,8 +308,8 @@ def run():
                 print str(eval_train_vae) + "\t" + str(eval_test_vae) + "\t" + str(eval_train_ws) + "\t" + str(eval_test_ws)
                 print "-----------------------------------------"
 
-        sample_vae = sess.run(x_vae, feed_dict={z: tf.random_normal([100, 2]).eval()})
-        sample_ws = sess.run(x_ws, feed_dict={z: tf.random_normal([100, 2]).eval()})
+        sample_vae = sess.run(x_vae, feed_dict={z: numpy.random.randn(100, 2)})
+        sample_ws = sess.run(x_ws, feed_dict={z: numpy.random.randn(100, 2)})
         plot(sample_vae, "vae_10_10", 10)
         plot(sample_ws, "ws_10_10", 10)
 

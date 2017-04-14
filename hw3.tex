@@ -4,6 +4,7 @@
 \usepackage{graphicx}
 \usepackage{amsmath}
 \usepackage[]{algorithm2e}
+\usepackage{algorithmic}
 \begin{document}
 \title{10708 Homework 3}
 \author{Fan Jiang  \\fanj}
@@ -155,7 +156,9 @@ The acceptance can be calculated as: \\
 \end{align*}
 \\
 \\
-The algorithm: \\
+The algorithm: 
+\\
+\\
 \begin{algorithm}[H]
 Initialize starting state $x^0$, set t = 0;\\
 \While {samples have not converged}{
@@ -175,11 +178,49 @@ sample $u \sim Uniform(0, 1)$: \\
 H(q, p) = \frac{1}{Z}\exp(-U(q)/T)\exp(-K(p)/T),
 \end{align*} \\
 where $U(q) = -log[\pi(q)]$ and $K(p) = \sum_{i=1}^d \frac{p_i^2}{2}$. \\
-where $\pi(q)$ indicates the mixture Gaussian model - $\sum_{i=1}^m \pi_i N(x; \mu_i, \Sigma_i)$. P are assumed to be independent Gaussians.
+where $\pi(q)$ indicates the mixture Gaussian model - $\sum_{i=1}^m \pi_i N(x; \mu_i, \Sigma_i)$. P are assumed to be independent standard Gaussians.
 
 \subsubsection{}
+\begin{align*}
+	\frac{\partial U(q)}{\partial q} & = \frac{\partial -\log\left(\sum_{i=1}^m \pi_iN(q;\mu_i, \Sigma_i)\right)}{\partial q}\\
+	&= -\frac{1}{\sum_{i=1}^m \pi_iN(q;\mu_i, \Sigma_i)} \frac{\partial \sum_{i=1}^m \pi_iN(q;\mu_i, \Sigma_i)}{\partial q} \\
+	& = -\frac{1}{\sum_{i=1}^m \pi_iN(q;\mu_i, \Sigma_i)} \frac{\sum_{i=1}^m \partial \pi_iN(q;\mu_i, \Sigma_i)}{\partial q} \\
+	& = -\frac{1}{\sum_{i=1}^m \pi_iN(q;\mu_i, \Sigma_i)} \frac{\sum_{i=1}^m \pi_i \partial N(q;\mu_i, \Sigma_i)}{\partial q}
+\end{align*}
+Take derivative of a normal distribution with respect to q,
+\begin{align*}
+	\frac{\partial N(q;\mu_i, \Sigma_i)}{\partial q} &= \frac{\partial \frac{1}{\sqrt{2\pi}\sigma_i}\exp\left(- \frac{(q-\mu_i)^2}{2\sigma_i^2} \right)}{\partial q} \\
+	&= \frac{1}{\sqrt{2\pi}\sigma_i} \frac{\partial \exp\left(- \frac{(q-\mu_i)^2}{2\sigma_i^2} \right)}{\partial q} \\
+	& = \frac{1}{\sqrt{2\pi}\sigma_i} \exp\left(- \frac{(q-\mu_i)^2}{2\sigma_i^2} \right) \frac{\partial - \frac{(q-\mu_i)^2}{2\sigma_i^2}}{\partial q} \\
+	& = \frac{1}{\sqrt{2\pi}\sigma_i} \exp\left(- \frac{(q-\mu_i)^2}{2\sigma_i^2} \right) \left(-\frac{1}{2\sigma_i^2} \right) \frac{\partial ((q-\mu_i)^2)}{\partial q} \\
+	&= \frac{1}{\sqrt{2\pi}\sigma_i} \exp\left(- \frac{(x-\mu_i)^2}{2\sigma_i^2} \right) \left(-\frac{1}{2\sigma_i^2} \right) 2 (q-\mu_i) \\
+	& = \left(- \frac{q-\mu_i}{\sqrt{2\pi}\sigma_i^3} \right) \exp\left(- \frac{(q-\mu_i)^2}{2\sigma_i^2} \right)
+\end{align*}
+Plug the derivative of normal distribution back to the original derivative, we get
+\begin{align*}
+	\frac{\partial U(q)}{\partial q} & = -\frac{\sum_{i=1}^m \pi_i \left(- \frac{q-\mu_i}{\sqrt{2\pi}\sigma_i^3} \right) \exp\left(- \frac{(q-\mu_i)^2}{2\sigma_i^2} \right)}{\sum_{i=1}^m \pi_iN(q;\mu_i, \Sigma_i)}  \\
+	&= \frac{\sum_{i=1}^m \pi_i  \frac{q-\mu_i}{\sqrt{2\pi}\sigma_i^3} \exp\left(- \frac{(q-\mu_i)^2}{2\sigma_i^2} \right)}{\sum_{i=1}^m \pi_i \frac{1}{\sqrt{2\pi}\sigma_i}\exp\left(- \frac{(q-\mu_i)^2}{2\sigma_i^2} \right)}
+\end{align*}
 
+\subsubsection{}
+The algorithm leap frog is given by the following:
+\\
+\begin{algorithmic}[H]
+	\STATE q = currentq 
+	\STATE p = random normal(shape(q), mean=0, stddev=1) 
+	\STATE currentp = p 
 
+	\STATE p = p - epsilon * gradient of U(q) / 2 
+	
+	\FOR{i in 1:L} \STATE {
+	q = q + epsilon * p
+	\IF{i !=L} \STATE {p = p - epsilon * gradient of U(q)} \ENDIF
+	} \ENDFOR
+	
+	p = p - epsilon * gradient of U(q) / 2
+	
+	
+\end{algorithmic}
 
 \subsection{Effective sample size}
 
