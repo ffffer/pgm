@@ -264,6 +264,7 @@ def run():
 
         for e in range(100):
             for b in range(110):
+                print "e : " + str(e) + " | b : " + str(b)
                 batch = train_image[b * batch_size : b * batch_size + batch_size]
 
                 sess.run(train_e, feed_dict={x: batch})
