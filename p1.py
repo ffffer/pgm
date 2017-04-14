@@ -271,6 +271,7 @@ def run():
                 sess.run(train_w, feed_dict={x: batch})
                 sess.run(train_s, feed_dict={z: tf.random_normal([1, 2]).eval()})
 
+                continue
                 if b % 10 == 0:
                     print "e : " + str(e) + " | b : " + str(b)
                     lb = sess.run(lower_bound, feed_dict={x: batch})
