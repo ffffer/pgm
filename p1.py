@@ -14,7 +14,7 @@ print "Finished loading MNIST data"
 
 n_hidden = 512
 n_input = 784
-batch_size = 50
+batch_size = 500
 len_test = len(test_image)
 len_train = len(train_image)
 len_sample = 1000
@@ -40,44 +40,63 @@ with tf.variable_scope("sleep"):
         '_b1': tf.Variable(tf.zeros([n_hidden], dtype=tf.float64)),
         '_b_out': tf.Variable(tf.zeros([n_input], dtype=tf.float64))
     }
+with tf.variable_scope("vae"):
+    decoder_weights = {
+        '_h1': tf.Variable(tf.random_normal([n_input, n_hidden], stddev=0.01, dtype=tf.float64)),
+        '_h_out_sigma': tf.Variable(tf.random_normal([n_hidden, 2], stddev=0.01, dtype=tf.float64)),
+        '_h_out_mu': tf.Variable(tf.random_normal([n_hidden, 2], stddev=0.01, dtype=tf.float64))
+    }
+    decoder_biases = {
+        '_b1': tf.Variable(tf.zeros([n_hidden], dtype=tf.float64)),
+        '_b_out_sigma': tf.Variable(tf.zeros([2], dtype=tf.float64)),
+        '_b_out_mu': tf.Variable(tf.zeros([2], dtype=tf.float64))
+    }
 
-decoder_weights = {
-    '_h1': tf.Variable(tf.random_normal([n_input, n_hidden], stddev=0.01, dtype=tf.float64)),
-    '_h_out_sigma': tf.Variable(tf.random_normal([n_hidden, 2], stddev=0.01, dtype=tf.float64)),
-    '_h_out_mu': tf.Variable(tf.random_normal([n_hidden, 2], stddev=0.01, dtype=tf.float64))
-}
-decoder_biases = {
-    '_b1': tf.Variable(tf.zeros([n_hidden], dtype=tf.float64)),
-    '_b_out_sigma': tf.Variable(tf.zeros([2], dtype=tf.float64)),
-    '_b_out_mu': tf.Variable(tf.zeros([2], dtype=tf.float64))
-}
-
-encoder_weights = {
-    '_h1': tf.Variable(tf.random_normal([2, n_hidden], stddev=0.01, dtype=tf.float64)),
-    '_h_out': tf.Variable(tf.random_normal([n_hidden, n_input], stddev=0.01, dtype=tf.float64))
-}
-encoder_biases = {
-    '_b1': tf.Variable(tf.zeros([n_hidden], dtype=tf.float64)),
-    '_b_out': tf.Variable(tf.zeros([n_input], dtype=tf.float64))
-}
+    encoder_weights = {
+        '_h1': tf.Variable(tf.random_normal([2, n_hidden], stddev=0.01, dtype=tf.float64)),
+        '_h_out': tf.Variable(tf.random_normal([n_hidden, n_input], stddev=0.01, dtype=tf.float64))
+    }
+    encoder_biases = {
+        '_b1': tf.Variable(tf.zeros([n_hidden], dtype=tf.float64)),
+        '_b_out': tf.Variable(tf.zeros([n_input], dtype=tf.float64))
+    }
 print "Finished initializing weights"
 
 
-def qzx(x, weights, biases):
-    layer_1 = tf.add(tf.matmul(x, weights['_h1']), biases['_b1'])
+def qzx_ws(x):
+    layer_1 = tf.add(tf.matmul(x, wake_weights['_h1']), wake_biases['_b1'])
     layer_1 = tf.nn.relu(layer_1)
 
-    out_layer_mu = tf.matmul(layer_1, weights['_h_out_mu']) + biases['_b_out_mu']
-    out_layer_sigma = tf.matmul(layer_1, weights['_h_out_sigma']) + biases['_b_out_sigma']
+    out_layer_mu = tf.matmul(layer_1, wake_weights['_h_out_mu']) + wake_biases['_b_out_mu']
+    out_layer_sigma = tf.matmul(layer_1, wake_weights['_h_out_sigma']) + wake_biases['_b_out_sigma']
 
     return out_layer_mu, out_layer_sigma
 
 
-def pxz(z, weights, biases):
-    layer_1 = tf.add(tf.matmul(z, weights['_h1']), biases['_b1'])
+def qzx_vae(x):
+    layer_1 = tf.add(tf.matmul(x, decoder_weights['_h1']), decoder_biases['_b1'])
     layer_1 = tf.nn.relu(layer_1)
 
-    out_layer = tf.matmul(layer_1, weights['_h_out']) + biases['_b_out']
+    out_layer_mu = tf.matmul(layer_1, decoder_weights['_h_out_mu']) + decoder_biases['_b_out_mu']
+    out_layer_sigma = tf.matmul(layer_1, decoder_weights['_h_out_sigma']) + decoder_biases['_b_out_sigma']
+
+    return out_layer_mu, out_layer_sigma
+
+
+def pxz_ws(z):
+    layer_1 = tf.add(tf.matmul(z, sleep_weights['_h1']), sleep_biases['_b1'])
+    layer_1 = tf.nn.relu(layer_1)
+
+    out_layer = tf.matmul(layer_1, sleep_weights['_h_out']) + sleep_biases['_b_out']
+    prob = tf.nn.sigmoid(out_layer)
+
+    return prob, out_layer
+
+def pxz_vae(z):
+    layer_1 = tf.add(tf.matmul(z, encoder_weights['_h1']), encoder_biases['_b1'])
+    layer_1 = tf.nn.relu(layer_1)
+
+    out_layer = tf.matmul(layer_1, encoder_weights['_h_out']) + encoder_biases['_b_out']
     prob = tf.nn.sigmoid(out_layer)
 
     return prob, out_layer
@@ -109,14 +128,19 @@ def normal_prob(x, mu, sigma, standard=False):
 
 
 def log_normal_prob(x, mu, sigma):
-    return -math.log(2*math.pi) - 0.5 * tf.log(tf.reduce_prod(tf.square(sigma), 1)) - 0.5 * (tf.reduce_sum(tf.multiply(
+    return -math.log(2*math.pi) - 1.0 * tf.log(tf.reduce_prod(sigma, 1)) - 0.5 * (tf.reduce_sum(tf.multiply(
         tf.square(tf.subtract(x, mu)), (tf.square(sigma) ** -1.0)), 1))
 
 
-def evaluate(x, p_weights, p_biases, q_weights, q_biases):
-    z_mu_eval, z_sigma_eval = qzx(x, q_weights, q_biases)
-    z_gen_eval = sample_z([len_sample, 2], z_mu_eval, z_sigma_eval)
-    x_gen_prob_eval, x_gen_eval = pxz(z_gen_eval, p_weights, p_biases)
+def evaluate(x, network_name):
+    if network_name == 'vae':
+        z_mu_eval, z_sigma_eval = qzx_vae(x)
+        z_gen_eval = sample_z([len_sample, 2], z_mu_eval, z_sigma_eval)
+        x_gen_prob_eval, x_gen_eval = pxz_vae(z_gen_eval)
+    else:
+        z_mu_eval, z_sigma_eval = qzx_ws(x)
+        z_gen_eval = sample_z([len_sample, 2], z_mu_eval, z_sigma_eval)
+        x_gen_prob_eval, x_gen_eval = pxz_ws(z_gen_eval)
 
     p1 = tf.exp(tf.negative(tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(labels=x, logits=x_gen_eval), 1)))
     p2 = normal_prob(z_gen_eval, [], [], standard=True)
@@ -175,59 +199,62 @@ def run():
     z = tf.placeholder(tf.float64, [None, 2])
 
     # train wake sleep
-    z_mu_w, z_sigma_w = qzx(x, wake_weights, wake_biases)
+    z_mu_w, z_sigma_w = qzx_ws(x)
     z_gen_w = sample_z([1, 2], z_mu_w, z_sigma_w)
-    x_gen_prob_w, x_gen_w = pxz(z_gen_w, sleep_weights, sleep_biases)
+    x_gen_prob_w, x_gen_w = pxz_ws(z_gen_w)
     cross_entropy_w = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(labels=x, logits=x_gen_w), 1)
-    var_list_w = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='s')
+    var_list_w = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='sleep')
     train_w = tf.train.AdamOptimizer().minimize(cross_entropy_w, var_list=var_list_w)
 
     # train sleep
-    x_mu_prob_s, x_mu_s = pxz(z, sleep_weights, sleep_biases)
+    x_mu_prob_s, x_mu_s = pxz_ws(z)
     x_gen_s = sample_x(x_mu_prob_s)
-    z_mu_s, z_sigma_s = qzx(x_gen_s, wake_weights, wake_biases)
+    z_mu_s, z_sigma_s = qzx_ws(x_gen_s)
     likelihood = log_normal_prob(z, z_mu_s, z_sigma_s)
-    var_list_s = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='w')
+    var_list_s = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='wake')
     train_s = tf.train.AdamOptimizer().minimize(-likelihood, var_list=var_list_s)
 
     # train vae
-    z_mu_v, z_sigma_v = qzx(x, decoder_weights, decoder_biases)
+    z_mu_v, z_sigma_v = qzx_vae(x)
     z_gen_v = sample_z([1, 2], z_mu_v, z_sigma_v)
-    x_gen_prob_v, x_gen_v = pxz(z_gen_v, encoder_weights, encoder_biases)
+    x_gen_prob_v, x_gen_v = pxz_vae(z_gen_v)
 
     cross_entropy_v = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(labels=x, logits=x_gen_v), 1)
     kl = 0.5 * tf.reduce_sum(tf.square(z_sigma_v) + z_mu_v ** 2 - 1.0 - tf.log(tf.square(z_sigma_v)), 1)
     lower_bound = tf.reduce_mean(cross_entropy_v + kl)
-    var_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
+    var_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='vae')
     train_e = tf.train.AdamOptimizer().minimize(lower_bound, var_list=var_list)
 
     # evaluation
-    eval_vae= evaluate(x, encoder_weights, encoder_biases, decoder_weights, decoder_biases)
-    eval_ws = evaluate(x, sleep_weights, sleep_biases, wake_weights, wake_biases)
+    eval_vae= evaluate(x, 'vae')
+    eval_ws = evaluate(x, 'ws')
 
     # plot
-    x_vae, _ = pxz(z, encoder_weights, encoder_biases)
-    x_ws, _ = pxz(z, sleep_weights, sleep_biases)
+    x_vae, _ = pxz_vae(z)
+    x_ws, _ = pxz_ws(z)
 
     # scatter
-    z_mu_scatter_vae, z_sigma_scatter_vae = qzx(x, decoder_weights, decoder_biases)
+    z_mu_scatter_vae, z_sigma_scatter_vae = qzx_vae(x)
     z_scatter_vae = sample_z([len_test, 2], z_mu_scatter_vae, z_sigma_scatter_vae)
-    z_mu_scatter_ws, z_sigma_scatter_ws = qzx(x, wake_weights, wake_biases)
+    z_mu_scatter_ws, z_sigma_scatter_ws = qzx_ws(x)
     z_scatter_ws = sample_z([len_test, 2], z_mu_scatter_ws, z_sigma_scatter_ws)
 
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
         for e in range(100):
-            for b in range(1100):
+            for b in range(110):
                 batch = train_image[b * batch_size : b * batch_size + batch_size]
 
-                _, lb = sess.run([train_e, lower_bound], feed_dict={x: batch})
+                sess.run(train_e, feed_dict={x: batch})
 
-                _, loss_w = sess.run([train_w, cross_entropy_w], feed_dict={x: batch})
-                _, ml = sess.run([train_s, likelihood], feed_dict={z: tf.random_normal([1, 2]).eval()})
+                sess.run(train_w, feed_dict={x: batch})
+                sess.run(train_s, feed_dict={z: tf.random_normal([1, 2]).eval()})
 
-                if b % 100 == 0:
+                if b % 10 == 0:
                     print "e : " + str(e) + " | b : " + str(b)
+                    lb = sess.run(lower_bound, feed_dict={x: batch})
+                    loss_w = sess.run(cross_entropy_w, feed_dict={x: batch})
+                    ml = sess.run(likelihood, feed_dict={z: tf.random_normal([1, 2]).eval()})
                     print lb
                     print tf.reduce_mean(loss_w).eval()
                     print ml
