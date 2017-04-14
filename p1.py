@@ -19,38 +19,48 @@ len_test = len(test_image)
 len_train = len(train_image)
 len_sample = 1000
 
+print "Start initializing weights"
+with tf.variable_scope("wake"):
+    wake_weights = {
+        '_h1': tf.Variable(tf.random_normal([n_input, n_hidden], stddev=0.01, dtype=tf.float64)),
+        '_h_out_sigma': tf.Variable(tf.random_normal([n_hidden, 2], stddev=0.01, dtype=tf.float64)),
+        '_h_out_mu': tf.Variable(tf.random_normal([n_hidden, 2], stddev=0.01, dtype=tf.float64))
+    }
+    wake_biases = {
+        '_b1': tf.Variable(tf.zeros([n_hidden], dtype=tf.float64)),
+        '_b_out_sigma': tf.Variable(tf.zeros([2], dtype=tf.float64)),
+        '_b_out_mu': tf.Variable(tf.zeros([2], dtype=tf.float64))
+    }
+with tf.variable_scope("sleep"):
+    sleep_weights = {
+        '_h1': tf.Variable(tf.random_normal([2, n_hidden], stddev=0.01, dtype=tf.float64)),
+        '_h_out': tf.Variable(tf.random_normal([n_hidden, n_input], stddev=0.01, dtype=tf.float64))
+    }
+    sleep_biases = {
+        '_b1': tf.Variable(tf.zeros([n_hidden], dtype=tf.float64)),
+        '_b_out': tf.Variable(tf.zeros([n_input], dtype=tf.float64))
+    }
 
-def create_variables(scope, number_output):
-    if number_output == 1:
-        with tf.variable_scope(scope, reuse=False):
-            weights = {
-                '_h1': tf.get_variable(scope+"_h1", [2, n_hidden], dtype=tf.float64, initializer=tf.random_normal_initializer(mean=0.0, stddev=0.01)),
-                '_h_out': tf.get_variable(scope + "_h_out", [n_hidden, n_input], dtype=tf.float64, initializer=tf.random_normal_initializer(mean=0.0, stddev=0.01))
-            }
-            biases = {
-                '_b1': tf.get_variable(scope + "_b1", [n_hidden], dtype=tf.float64, initializer=tf.constant_initializer(0.0)),
-                '_b_out': tf.get_variable(scope + "_b_out", [n_input], dtype=tf.float64, initializer=tf.constant_initializer(0.0))
-            }
-    elif number_output == 2:
-        with tf.variable_scope(scope, reuse=None):
-            weights = {
-                '_h1': tf.get_variable("_h1", [n_input, n_hidden], dtype=tf.float64, initializer=tf.random_normal_initializer(mean=0.0, stddev=0.01)),
-                '_h_out_sigma': tf.get_variable(scope + "_h_out_sigma", [n_hidden, 2], dtype=tf.float64, initializer=tf.random_normal_initializer(mean=0.0, stddev=0.01)),
-                '_h_out_mu': tf.get_variable(scope + "_h_out_mu", [n_hidden, 2], dtype=tf.float64, initializer=tf.random_normal_initializer(mean=0.0, stddev=0.01))
-            }
-            biases = {
-                '_b1': tf.get_variable(scope + "_b1", [n_hidden], dtype=tf.float64, initializer=tf.constant_initializer(0.0)),
-                '_b_out_sigma': tf.get_variable(scope + "_b_out_sigma", [2], dtype=tf.float64, initializer=tf.constant_initializer(0.0)),
-                '_b_out_mu': tf.get_variable(scope + "_b_out_mu", [2], dtype=tf.float64, initializer=tf.constant_initializer(0.0))
-            }
-    return weights, biases
+decoder_weights = {
+    '_h1': tf.Variable(tf.random_normal([n_input, n_hidden], stddev=0.01, dtype=tf.float64)),
+    '_h_out_sigma': tf.Variable(tf.random_normal([n_hidden, 2], stddev=0.01, dtype=tf.float64)),
+    '_h_out_mu': tf.Variable(tf.random_normal([n_hidden, 2], stddev=0.01, dtype=tf.float64))
+}
+decoder_biases = {
+    '_b1': tf.Variable(tf.zeros([n_hidden], dtype=tf.float64)),
+    '_b_out_sigma': tf.Variable(tf.zeros([2], dtype=tf.float64)),
+    '_b_out_mu': tf.Variable(tf.zeros([2], dtype=tf.float64))
+}
 
-print "Start creating variables"
-wake_weights, wake_biases = create_variables('w', 2)
-sleep_weights, sleep_biases = create_variables('s', 1)
-decoder_weights, decoder_biases = create_variables('d', 2)
-encoder_weights, encoder_biases = create_variables('e', 1)
-print "Finished creating variables"
+encoder_weights = {
+    '_h1': tf.Variable(tf.random_normal([2, n_hidden], stddev=0.01, dtype=tf.float64)),
+    '_h_out': tf.Variable(tf.random_normal([n_hidden, n_input], stddev=0.01, dtype=tf.float64))
+}
+encoder_biases = {
+    '_b1': tf.Variable(tf.zeros([n_hidden], dtype=tf.float64)),
+    '_b_out': tf.Variable(tf.zeros([n_input], dtype=tf.float64))
+}
+print "Finished initializing weights"
 
 
 def qzx(x, weights, biases):
@@ -74,7 +84,7 @@ def pxz(z, weights, biases):
 
 
 def sample_z(shape, mu, sigma):
-    epi = tf.random_normal(shape=shape,dtype=tf.float64)
+    epi = tf.random_normal(shape=shape, dtype=tf.float64)
     z = mu + tf.multiply(sigma, epi)
 
     return z
